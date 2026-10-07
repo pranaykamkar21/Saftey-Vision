@@ -30,7 +30,7 @@ let previewUrl = null;
 let videoUrl = null;
 let sourceMode = "image";
 let cameraStream = null;
-let activeVideo = null;
+let webcamCaptured = false;
 let animationFrame = 0;
 let analysisPending = false;
 let processingStopped = false;
@@ -54,11 +54,17 @@ let runToken = 0;
 let finishingRun = false;
 
 async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    ...options,
-    headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      credentials: "same-origin",
+      ...options,
+      headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    throw new Error(`Could not reach ${url}. Confirm Vercel deployed the latest commit with its API functions, then reload the page.`);
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Request failed (${response.status}).`);
   return payload;
@@ -113,7 +119,10 @@ function setSourceMode(mode) {
   byId("result-badge").className = "result-badge";
   byId("process-progress").hidden = true;
   byId("camera-start").hidden = false;
+  byId("camera-capture").hidden = true;
   byId("camera-stop").hidden = true;
+  byId("camera-retake").hidden = true;
+  webcamCaptured = false;
   cameraPreview.hidden = true;
   cameraPreview.srcObject = null;
   byId("camera-preview-empty").hidden = false;
@@ -171,6 +180,7 @@ function clearImage() {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = null;
   chosenFile = null;
+  if (sourceMode === "webcam") webcamCaptured = false;
   currentImage = null;
   imageInput.value = "";
   selectedFile.hidden = true;
@@ -604,25 +614,11 @@ function finishRun(token, completed) {
   finishingRun = true;
   cancelAnimationFrame(animationFrame);
   if (runMode === "video") sourceVideo.pause();
-  if (runMode === "webcam" && sourceVideo.srcObject) {
-    for (const track of sourceVideo.srcObject.getTracks()) track.stop();
-    sourceVideo.srcObject = null;
-    cameraPreview.srcObject = null;
-    cameraPreview.hidden = true;
-    byId("camera-preview-empty").hidden = false;
-    byId("camera-preview-empty").textContent = "Camera stopped. Start webcam to view it again.";
-    byId("camera-preview-status").textContent = "CAMERA STOPPED";
-    byId("camera-preview-frame").classList.remove("live");
-  }
   sourceVideo.controls = false;
-  byId("media-status-label").textContent = runMode === "video"
-    ? completed ? "VIDEO COMPLETE" : "VIDEO PAUSED"
-    : "WEBCAM STOPPED";
+  byId("media-status-label").textContent = completed ? "VIDEO COMPLETE" : "VIDEO PAUSED";
   byId("media-preview").classList.add("stopped");
   if (mediaRecorder?.state === "recording") mediaRecorder.stop();
   mediaRecorder = null;
-  byId("camera-start").hidden = false;
-  byId("camera-stop").hidden = true;
   byId("task-select").disabled = false;
   byId("video-start").disabled = !chosenVideoFile;
   byId("process-stop").hidden = true;
@@ -630,7 +626,7 @@ function finishRun(token, completed) {
   byId("result-badge").className = "result-badge ready";
   byId("progress-label").textContent = completed
     ? `Video complete · ${processedFrames} sampled frames`
-    : `${runMode === "webcam" ? "Webcam stopped" : "Video stopped"} · ${processedFrames} sampled frames`;
+    : `Video stopped · ${processedFrames} sampled frames`;
   if (completed) {
     byId("progress-bar").value = 100;
     byId("progress-percent").textContent = "100%";
@@ -653,6 +649,10 @@ function stopActiveSources() {
     for (const track of sourceVideo.srcObject.getTracks()) track.stop();
     sourceVideo.srcObject = null;
   }
+  if (cameraStream) {
+    for (const track of cameraStream.getTracks()) track.stop();
+    cameraStream = null;
+  }
   cameraPreview.pause();
   cameraPreview.srcObject = null;
   cameraPreview.hidden = true;
@@ -660,6 +660,10 @@ function stopActiveSources() {
   byId("camera-preview-empty").textContent = "Your live camera preview appears here";
   byId("camera-preview-status").textContent = "CAMERA OFF";
   byId("camera-preview-frame").classList.remove("live");
+  byId("camera-start").hidden = false;
+  byId("camera-capture").hidden = true;
+  byId("camera-stop").hidden = true;
+  byId("camera-retake").hidden = true;
   sourceVideo.pause();
   sourceVideo.controls = false;
   byId("media-preview").hidden = true;
@@ -699,59 +703,142 @@ byId("video-start").addEventListener("click", async () => {
   }
 });
 
-byId("camera-start").addEventListener("click", async () => {
+async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    showAlert("Webcam access requires a supported browser and a secure HTTPS connection.");
-    return;
+    throw new Error("Webcam access requires a supported browser and a secure HTTPS connection.");
   }
   showAlert("");
+  cameraStream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+  });
+  cameraPreview.srcObject = cameraStream;
+  cameraPreview.muted = true;
+  cameraPreview.hidden = false;
+  byId("camera-preview-empty").hidden = true;
+  byId("camera-preview-frame").classList.add("live");
+  byId("camera-preview-status").textContent = "LIVE CAMERA";
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-    });
-    sourceVideo.pause();
-    sourceVideo.removeAttribute("src");
-    sourceVideo.load();
-    sourceVideo.srcObject = stream;
-    sourceVideo.muted = true;
-    cameraPreview.srcObject = stream;
-    cameraPreview.hidden = false;
-    byId("camera-preview-empty").hidden = true;
-    byId("camera-preview-frame").classList.add("live");
-    byId("camera-preview-status").textContent = "LIVE CAMERA";
     await cameraPreview.play();
-    await sourceVideo.play();
-    for (const track of stream.getVideoTracks()) {
-      track.addEventListener("ended", () => {
-        if (runMode === "webcam") {
-          processingStopped = true;
-          showAlert("The webcam stream ended.");
-        }
-      }, { once: true });
-    }
-    runStartedAt = Date.now();
-    startRun("webcam", "webcam");
-    byId("camera-start").hidden = true;
-    byId("camera-stop").hidden = false;
-    byId("camera-help").textContent = "Camera is active. Sampled frames go to the inference API every 1.5 seconds.";
   } catch (error) {
-    if (sourceVideo.srcObject) {
-      for (const track of sourceVideo.srcObject.getTracks()) track.stop();
-      sourceVideo.srcObject = null;
-    }
+    for (const track of cameraStream.getTracks()) track.stop();
+    cameraStream = null;
     cameraPreview.srcObject = null;
     cameraPreview.hidden = true;
     byId("camera-preview-empty").hidden = false;
     byId("camera-preview-frame").classList.remove("live");
     byId("camera-preview-status").textContent = "CAMERA OFF";
+    throw new Error(`Could not show the webcam preview: ${error.message}`);
+  }
+  for (const track of cameraStream.getVideoTracks()) {
+    track.addEventListener("ended", () => {
+      cameraStream = null;
+      cameraPreview.hidden = true;
+      byId("camera-preview-empty").hidden = false;
+      byId("camera-preview-empty").textContent = "Camera stopped. Start the webcam again to capture a photo.";
+      byId("camera-preview-status").textContent = "CAMERA STOPPED";
+      byId("camera-preview-frame").classList.remove("live");
+      byId("camera-start").hidden = false;
+      byId("camera-capture").hidden = true;
+      byId("camera-stop").hidden = true;
+      if (sourceMode === "webcam" && !webcamCaptured) showAlert("The webcam stream ended.");
+    }, { once: true });
+  }
+  byId("camera-start").hidden = true;
+  byId("camera-capture").hidden = false;
+  byId("camera-stop").hidden = false;
+  byId("camera-retake").hidden = true;
+  byId("camera-help").textContent = "Your camera is live. Capture a photo to detect mask or helmet compliance.";
+}
+
+byId("camera-start").addEventListener("click", async () => {
+  try {
+    await startCamera();
+  } catch (error) {
     showAlert(`Could not start the webcam: ${error.message}`);
   }
 });
 
+byId("camera-capture").addEventListener("click", () => {
+  if (!cameraStream || cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    showAlert("Wait for the live webcam image to appear, then capture the photo.");
+    return;
+  }
+  try {
+    const snapshot = document.createElement("canvas");
+    snapshot.width = cameraPreview.videoWidth;
+    snapshot.height = cameraPreview.videoHeight;
+    snapshot.getContext("2d").drawImage(cameraPreview, 0, 0, snapshot.width, snapshot.height);
+    currentImage = snapshot;
+    webcamCaptured = true;
+    for (const track of cameraStream.getTracks()) track.stop();
+    cameraStream = null;
+    cameraPreview.pause();
+    cameraPreview.srcObject = null;
+    cameraPreview.hidden = true;
+    byId("camera-preview-empty").hidden = false;
+    byId("camera-preview-empty").textContent = "Photo captured. Review it in the results panel, then analyze.";
+    byId("camera-preview-status").textContent = "PHOTO CAPTURED";
+    byId("camera-preview-frame").classList.remove("live");
+    byId("camera-capture").hidden = true;
+    byId("camera-stop").hidden = true;
+    byId("camera-retake").hidden = false;
+    byId("camera-help").textContent = "Photo captured. Choose Retake photo to use the webcam again.";
+    analyzeButton.hidden = false;
+    analyzeButton.disabled = false;
+    byId("media-preview").hidden = true;
+    byId("video-download").hidden = true;
+    byId("result-empty").hidden = true;
+    byId("result-content").hidden = false;
+    byId("result-badge").textContent = "PHOTO CAPTURED";
+    byId("result-badge").className = "result-badge ready";
+    byId("result-note").textContent = "Webcam snapshot captured. Analyze this photo to see detection results.";
+    byId("prediction-list").replaceChildren();
+    byId("metric-total").textContent = "0";
+    byId("metric-violations").textContent = "0";
+    byId("metric-compliant").textContent = "0";
+    drawImage([], snapshot);
+    showAlert("");
+  } catch (error) {
+    showAlert(`Could not capture the webcam photo: ${error.message}`);
+  }
+});
+
 byId("camera-stop").addEventListener("click", () => {
-  processingStopped = true;
-  byId("camera-help").textContent = "Camera stopped. Start webcam to analyze another session.";
+  if (cameraStream) {
+    for (const track of cameraStream.getTracks()) track.stop();
+    cameraStream = null;
+  }
+  cameraPreview.pause();
+  cameraPreview.srcObject = null;
+  cameraPreview.hidden = true;
+  byId("camera-preview-empty").hidden = false;
+  byId("camera-preview-empty").textContent = "Camera stopped. Start the webcam to capture a photo.";
+  byId("camera-preview-status").textContent = "CAMERA OFF";
+  byId("camera-preview-frame").classList.remove("live");
+  byId("camera-start").hidden = false;
+  byId("camera-capture").hidden = true;
+  byId("camera-stop").hidden = true;
+  byId("camera-help").textContent = "Start the webcam when you are ready to capture a photo.";
+});
+
+byId("camera-retake").addEventListener("click", async () => {
+  currentImage = null;
+  webcamCaptured = false;
+  analyzeButton.disabled = true;
+  analyzeButton.hidden = true;
+  byId("result-content").hidden = true;
+  byId("result-empty").hidden = false;
+  byId("result-badge").textContent = "CAMERA READY";
+  byId("result-badge").className = "result-badge";
+  byId("camera-preview-empty").textContent = "Starting webcam preview…";
+  byId("camera-preview-empty").hidden = false;
+  try {
+    await startCamera();
+  } catch (error) {
+    byId("camera-preview-empty").textContent = "Your live camera preview appears here.";
+    showAlert(`Could not start the webcam: ${error.message}`);
+  }
 });
 
 byId("process-stop").addEventListener("click", () => {
@@ -782,7 +869,7 @@ function renderPredictions(predictions) {
 }
 
 analyzeButton.addEventListener("click", async () => {
-  if (!chosenFile || !currentImage) return;
+  if (!currentImage || (sourceMode === "image" && !chosenFile) || (sourceMode === "webcam" && !webcamCaptured)) return;
   analyzeButton.disabled = true;
   analyzeButton.textContent = "Analyzing…";
   byId("result-badge").textContent = "ANALYZING";
@@ -815,7 +902,7 @@ analyzeButton.addEventListener("click", async () => {
             task,
             class_name: prediction.label,
             confidence: prediction.confidence,
-            source: "image upload",
+            source: sourceMode === "webcam" ? "webcam snapshot" : "image upload",
             evidence,
           }),
         });
@@ -829,7 +916,7 @@ analyzeButton.addEventListener("click", async () => {
     byId("result-badge").className = "result-badge failed";
     showAlert(error.message);
   } finally {
-    analyzeButton.disabled = !chosenFile;
+    analyzeButton.disabled = !currentImage || (sourceMode === "image" && !chosenFile);
     analyzeButton.innerHTML = 'Analyze photo <span aria-hidden="true">↗</span>';
   }
 });
@@ -892,4 +979,3 @@ async function deleteEvent(id) {
 
 byId("evidence-filter").addEventListener("change", loadEvents);
 byId("refresh-events").addEventListener("click", loadEvents);
-loadEvents();

@@ -94,9 +94,11 @@
                   <video id="camera-preview" autoplay muted playsinline hidden></video>
                   <div id="camera-preview-empty" class="camera-preview-empty">Your live camera preview appears here</div>
                 </div>
-                <p id="camera-help" class="muted">Allow camera access when your browser asks. Camera frames are analyzed in this browser session.</p>
+                <p id="camera-help" class="muted">Allow camera access, capture a still photo, then choose Analyze photo.</p>
                 <button id="camera-start" class="button button-primary full-width" type="button">Start webcam</button>
+                <button id="camera-capture" class="button button-primary full-width" type="button" hidden>Capture photo</button>
                 <button id="camera-stop" class="button button-quiet full-width" type="button" hidden>Stop webcam</button>
+                <button id="camera-retake" class="button button-quiet full-width" type="button" hidden>Retake photo</button>
               </div>
               <div id="process-progress" class="process-progress" hidden>
                 <div class="progress-label"><span id="progress-label">Processing video…</span><strong id="progress-percent">0%</strong></div>
