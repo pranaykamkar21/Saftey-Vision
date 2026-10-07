@@ -27,5 +27,6 @@ models/**/*.onnx
 !models/mask_mobilenetv2/class_names.json
 node_modules/
 .vercel/
+.local-dev/
 .env*
 !.env.example

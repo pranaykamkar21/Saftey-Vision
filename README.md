@@ -56,3 +56,11 @@ python -m pip install -r requirements.txt
 ```
 
 Training, dataset preparation, and local image/video/webcam inference utilities remain under `src/`. Their local SQLite evidence store is separate from the hosted dashboard's Supabase store.
+
+To test the browser dashboard against the local trained models without Vercel, start the local development server from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe local_dev_server.py
+```
+
+Then open `http://127.0.0.1:4173`. This serves the dashboard and its `/api/analyze` route together, loading the local mask and helmet models on the first analysis request. Local evidence is stored under the ignored `.local-dev/` directory. The local server is for development only; it does not change the Vercel deployment runtime.
