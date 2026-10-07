@@ -708,28 +708,52 @@ async function startCamera() {
     throw new Error("Webcam access requires a supported browser and a secure HTTPS connection.");
   }
   showAlert("");
-  cameraStream = await navigator.mediaDevices.getUserMedia({
+  const constraints = {
     audio: false,
-    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-  });
+    video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  };
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (error) {
+    if (error.name === "OverconstrainedError") {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      } catch (fallbackError) {
+        throw new Error(cameraPermissionMessage(fallbackError));
+      }
+    } else {
+      throw new Error(cameraPermissionMessage(error));
+    }
+  }
   cameraPreview.srcObject = cameraStream;
   cameraPreview.muted = true;
   cameraPreview.hidden = false;
-  byId("camera-preview-empty").hidden = true;
-  byId("camera-preview-frame").classList.add("live");
-  byId("camera-preview-status").textContent = "LIVE CAMERA";
+  cameraPreview.style.visibility = "hidden";
+  byId("camera-preview-empty").textContent = "Waiting for the camera image…";
+  byId("camera-preview-empty").hidden = false;
+  byId("camera-preview-status").textContent = "CONNECTING CAMERA";
   try {
     await cameraPreview.play();
+    await waitForCameraFrame(cameraPreview);
   } catch (error) {
-    for (const track of cameraStream.getTracks()) track.stop();
+    for (const track of cameraStream?.getTracks() || []) track.stop();
     cameraStream = null;
     cameraPreview.srcObject = null;
     cameraPreview.hidden = true;
+    cameraPreview.style.visibility = "";
     byId("camera-preview-empty").hidden = false;
+    byId("camera-preview-empty").textContent = "Your live camera preview appears here";
     byId("camera-preview-frame").classList.remove("live");
     byId("camera-preview-status").textContent = "CAMERA OFF";
-    throw new Error(`Could not show the webcam preview: ${error.message}`);
+    const message = error.name === "TimeoutError"
+      ? error.message
+      : cameraPermissionMessage(error);
+    throw new Error(`Could not start the webcam preview: ${message}`);
   }
+  cameraPreview.style.visibility = "";
+  byId("camera-preview-empty").hidden = true;
+  byId("camera-preview-frame").classList.add("live");
+  byId("camera-preview-status").textContent = "LIVE CAMERA";
   for (const track of cameraStream.getVideoTracks()) {
     track.addEventListener("ended", () => {
       cameraStream = null;
@@ -751,6 +775,43 @@ async function startCamera() {
   byId("camera-help").textContent = "Your camera is live. Capture a photo to detect mask or helmet compliance.";
 }
 
+function cameraPermissionMessage(error) {
+  if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+    return "Allow camera access for this site in your browser settings, then try again. Webcam access requires HTTPS (or localhost).";
+  }
+  if (error.name === "NotFoundError") {
+    return "No webcam was found. Connect or enable a camera, then try again.";
+  }
+  if (error.name === "NotReadableError") {
+    return "The webcam is unavailable or being used by another app. Close other camera apps and try again.";
+  }
+  return error.message || "Check that a webcam is connected and enabled.";
+}
+
+function waitForCameraFrame(video) {
+  return new Promise((resolve, reject) => {
+    let animationFrame = 0;
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("The camera is on, but no image arrived. Check that the camera lens is uncovered and try again."));
+    }, 8000);
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
+    const checkFrame = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0
+          && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        cleanup();
+        resolve();
+        return;
+      }
+      animationFrame = window.requestAnimationFrame(checkFrame);
+    };
+    checkFrame();
+  });
+}
+
 byId("camera-start").addEventListener("click", async () => {
   try {
     await startCamera();
@@ -759,16 +820,26 @@ byId("camera-start").addEventListener("click", async () => {
   }
 });
 
-byId("camera-capture").addEventListener("click", () => {
-  if (!cameraStream || cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-    showAlert("Wait for the live webcam image to appear, then capture the photo.");
+byId("camera-capture").addEventListener("click", async () => {
+  if (!cameraStream) {
+    showAlert("Start the webcam before capturing a photo.");
     return;
   }
+  const captureButton = byId("camera-capture");
+  captureButton.disabled = true;
+  captureButton.textContent = "Waiting for camera…";
+  byId("camera-preview-status").textContent = "CAPTURING PHOTO";
+  showAlert("");
   try {
+    await waitForCameraFrame(cameraPreview);
     const snapshot = document.createElement("canvas");
     snapshot.width = cameraPreview.videoWidth;
     snapshot.height = cameraPreview.videoHeight;
-    snapshot.getContext("2d").drawImage(cameraPreview, 0, 0, snapshot.width, snapshot.height);
+    const context = snapshot.getContext("2d");
+    if (!context || !snapshot.width || !snapshot.height) {
+      throw new Error("The camera did not provide a usable image. Restart the webcam and try again.");
+    }
+    context.drawImage(cameraPreview, 0, 0, snapshot.width, snapshot.height);
     currentImage = snapshot;
     webcamCaptured = true;
     for (const track of cameraStream.getTracks()) track.stop();
@@ -798,9 +869,15 @@ byId("camera-capture").addEventListener("click", () => {
     byId("metric-violations").textContent = "0";
     byId("metric-compliant").textContent = "0";
     drawImage([], snapshot);
+    byId("result-content").scrollIntoView({ behavior: "smooth", block: "nearest" });
     showAlert("");
   } catch (error) {
+    byId("camera-preview-status").textContent = "LIVE CAMERA";
+    byId("camera-preview-empty").textContent = "Your live camera preview appears here";
     showAlert(`Could not capture the webcam photo: ${error.message}`);
+  } finally {
+    captureButton.disabled = false;
+    captureButton.textContent = "Capture photo";
   }
 });
 
