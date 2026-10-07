@@ -99,13 +99,15 @@ The Streamlit sidebar also has a **Capture violation evidence** toggle (on by de
 
 ## Streamlit UI
 
-The Streamlit settings bind the demo to localhost and disable usage-stat collection.
+The repository includes `packages.txt` with Linux runtime libraries needed by OpenCV on Streamlit Community Cloud. OpenCV requires NumPy below 2.3 for the supported 4.12 wheels.
 
 ```powershell
 streamlit run src/app.py --server.address 127.0.0.1
 ```
 
 The UI supports image upload, annotated video upload/download, and webcam snapshots. Use the CLI webcam command for continuous live processing.
+
+To deploy, connect this GitHub repository to Streamlit Community Cloud, select branch `main` and app file `src/app.py`. Each push to `main` triggers a redeploy.
 
 ## Local privacy and evidence handling
 
