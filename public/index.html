@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#07111b">
-    <meta name="description" content="Privacy-aware mask and helmet image analysis.">
+    <meta name="description" content="Public mask and helmet compliance analysis for images, video, and webcam streams.">
     <title>Saftey Vision</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
@@ -25,9 +25,9 @@
 
         <section class="hero">
           <div class="hero-copy">
-            <p class="eyebrow">IMAGE COMPLIANCE · 95% CONFIDENCE</p>
+            <p class="eyebrow">IMAGE · VIDEO · WEBCAM · 95% CONFIDENCE</p>
             <h1>A clearer view of<br><span>every safety check.</span></h1>
-            <p>Analyze a photo for face-mask or safety-helmet compliance. Evidence saves only a violation crop, never the full image.</p>
+            <p>Analyze photos, video clips, or a live webcam for face-mask and safety-helmet compliance. Evidence saves only a violation crop, never the full frame.</p>
           </div>
           <div class="hero-symbol" aria-hidden="true">
             <div class="orbit orbit-one"></div>
@@ -60,15 +60,49 @@
                 <option value="mask">Face mask</option>
                 <option value="helmet">Safety helmet</option>
               </select>
-              <label class="field-label">Photo to inspect</label>
-              <label id="drop-zone" class="drop-zone" for="image-input">
-                <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp">
-                <span class="upload-icon" aria-hidden="true">↑</span>
-                <strong>Drop a photo here</strong>
-                <span class="muted">or <span class="text-link">browse files</span></span>
-                <span class="file-hint">JPG, PNG or WebP · up to 12 MB</span>
-              </label>
-              <div id="selected-file" class="selected-file" hidden></div>
+              <span class="field-label">Input source</span>
+              <div class="source-modes" role="group" aria-label="Choose image, video, or webcam">
+                <button class="source-mode active" data-source="image" type="button">▧ <span>Image</span></button>
+                <button class="source-mode" data-source="video" type="button">▷ <span>Video</span></button>
+                <button class="source-mode" data-source="webcam" type="button">◉ <span>Webcam</span></button>
+              </div>
+              <div id="image-picker" class="picker-area">
+                <label class="field-label" for="image-input">Photo to inspect</label>
+                <label id="drop-zone" class="drop-zone" for="image-input">
+                  <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp">
+                  <span class="upload-icon" aria-hidden="true">↑</span>
+                  <strong>Drop a photo here</strong>
+                  <span class="muted">or <span class="text-link">browse files</span></span>
+                  <span class="file-hint">JPG, PNG or WebP · up to 12 MB</span>
+                </label>
+                <div id="selected-file" class="selected-file" hidden></div>
+              </div>
+              <div id="video-picker" class="picker-area" hidden>
+                <label class="field-label" for="video-input">Video to inspect</label>
+                <label id="video-drop-zone" class="drop-zone" for="video-input">
+                  <input id="video-input" type="file" accept="video/mp4,video/webm,video/quicktime">
+                  <span class="upload-icon" aria-hidden="true">▷</span>
+                  <strong>Choose a video clip</strong>
+                  <span class="muted">MP4 or WebM · up to 50 MB and 2 minutes</span>
+                  <span class="file-hint">Analyzed in your browser while it plays</span>
+                </label>
+                <div id="selected-video" class="selected-file" hidden></div>
+              </div>
+              <div id="webcam-controls" class="picker-area webcam-controls" hidden>
+                <div id="camera-preview-frame" class="camera-preview-frame">
+                  <div class="camera-preview-header"><span id="camera-status-dot" class="camera-status-dot"></span><span id="camera-preview-status">CAMERA OFF</span></div>
+                  <video id="camera-preview" autoplay muted playsinline hidden></video>
+                  <div id="camera-preview-empty" class="camera-preview-empty">Your live camera preview appears here</div>
+                </div>
+                <p id="camera-help" class="muted">Allow camera access when your browser asks. Camera frames are analyzed in this browser session.</p>
+                <button id="camera-start" class="button button-primary full-width" type="button">Start webcam</button>
+                <button id="camera-stop" class="button button-quiet full-width" type="button" hidden>Stop webcam</button>
+              </div>
+              <div id="process-progress" class="process-progress" hidden>
+                <div class="progress-label"><span id="progress-label">Processing video…</span><strong id="progress-percent">0%</strong></div>
+                <progress id="progress-bar" max="100" value="0"></progress>
+                <button id="process-stop" class="button button-quiet full-width" type="button">Stop processing</button>
+              </div>
               <div class="threshold-row">
                 <span>Confirmation threshold</span>
                 <strong>95%</strong>
@@ -81,7 +115,8 @@
               <button id="analyze-button" class="button button-primary full-width" type="button" disabled>
                 Analyze photo <span aria-hidden="true">↗</span>
               </button>
-              <p class="privacy-note"><span aria-hidden="true">◆</span> Photos are sent to your configured inference API. Only confirmed violation crops are saved.</p>
+              <button id="video-start" class="button button-primary full-width" type="button" disabled hidden>Analyze video <span aria-hidden="true">↗</span></button>
+              <p class="privacy-note"><span aria-hidden="true">◆</span> Frames are sent to your configured inference API. Only confirmed violation crops are saved.</p>
             </article>
 
             <article class="panel results-panel">
@@ -98,6 +133,10 @@
                 <p>Choose a clear photo, then run the analysis.</p>
               </div>
               <div id="result-content" hidden>
+                <div id="media-preview" class="media-preview" hidden>
+                  <div class="media-preview-header"><span id="media-status-dot" class="media-status-dot"></span><span id="media-status-label">LIVE · ANALYZING</span><span id="media-preview-time"></span></div>
+                  <video id="source-video" class="source-video" muted playsinline></video>
+                </div>
                 <div class="canvas-wrap"><canvas id="result-canvas" aria-label="Photo with detection boxes"></canvas></div>
                 <div class="metrics">
                   <div class="metric"><span>REGIONS FOUND</span><strong id="metric-total">0</strong></div>
@@ -106,6 +145,7 @@
                 </div>
                 <p id="result-note" class="result-note"></p>
                 <div id="prediction-list" class="prediction-list"></div>
+                <a id="video-download" class="button button-quiet video-download" hidden>Download annotated video</a>
               </div>
             </article>
           </div>
