@@ -5,7 +5,7 @@ Saftey Vision is a static web dashboard with Vercel serverless API routes. Detec
 ## Deploy to Vercel
 
 1. Create a Supabase project. In its SQL editor, run [`supabase/schema.sql`](./supabase/schema.sql) to create the private evidence bucket and violations table.
-2. Connect this GitHub repository to Vercel. Vercel serves the static site from `public/` and deploys the functions in `api/`; no build command or Python runtime is needed.
+2. Connect this GitHub repository to Vercel. Set **Framework Preset** to **Other**, leave the build command blank, and set the output directory to `public`. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`; this repository does not contain a Python runtime or Python entrypoint.
 3. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
 
 | Variable | Required | Value |
@@ -49,18 +49,4 @@ Anyone can submit images or video frames for inference, read and delete evidence
 
 ## Python training and local CLI
 
-The Python requirements and scripts are for local development and model training, not Vercel deployment. Install them with:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-Training, dataset preparation, and local image/video/webcam inference utilities remain under `src/`. Their local SQLite evidence store is separate from the hosted dashboard's Supabase store.
-
-To test the browser dashboard against the local trained models without Vercel, start the local development server from the project root:
-
-```powershell
-.\.venv\Scripts\python.exe local_dev_server.py
-```
-
-Then open `http://127.0.0.1:4173`. This serves the dashboard and its `/api/analyze` route together, loading the local mask and helmet models on the first analysis request. Local evidence is stored under the ignored `.local-dev/` directory. The local server is for development only; it does not change the Vercel deployment runtime.
+This repository contains only the Vercel web app, JavaScript API routes, and Supabase schema. The Vercel app uses the external inference service configured by `INFERENCE_API_URL`; local Python training scripts and model weights are intentionally excluded from the GitHub deployment source.
