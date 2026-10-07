@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/raw/
+data/classification/
+data/helmet_detector/
+data/*.sqlite3
+evidence/
+logs/
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+/data/
+/runs/
+/yolov8n.pt
+# Exclude generated training outputs and sample-image previews.
+/models/helmet_detector*/
+!/models/helmet_detector-2/
+/models/helmet_detector-2/*
+!/models/helmet_detector-2/weights/
+/models/helmet_detector-2/weights/*
+!/models/helmet_detector-2/weights/best.pt
+# Keep only the inference weights required by the deployed dashboard.
+!models/mask_mobilenetv2/
+!models/mask_mobilenetv2/best_model.pth
+!models/mask_mobilenetv2/class_names.json
