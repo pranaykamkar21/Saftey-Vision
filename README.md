@@ -5,7 +5,7 @@ Saftey Vision is a static web dashboard with Vercel serverless API routes. Detec
 ## Deploy to Vercel
 
 1. Create a Supabase project. In its SQL editor, run [`supabase/schema.sql`](./supabase/schema.sql) to create the private evidence bucket and violations table.
-2. Connect this GitHub repository to Vercel. Set **Framework Preset** to **Other**, leave the build command blank, and set the output directory to `public`. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`; this repository does not contain a Python runtime or Python entrypoint.
+2. Connect this GitHub repository to Vercel. `vercel.json` sets the framework preset to **Other** and the output directory to `public`; leave the build command blank. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`; this repository does not contain a Python runtime or Python entrypoint.
 3. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
 
 | Variable | Required | Value |
