@@ -25,3 +25,7 @@ models/**/*.onnx
 !models/mask_mobilenetv2/
 !models/mask_mobilenetv2/best_model.pth
 !models/mask_mobilenetv2/class_names.json
+node_modules/
+.vercel/
+.env*
+!.env.example

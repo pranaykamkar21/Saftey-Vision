@@ -1,125 +1,56 @@
 # Saftey Vision
 
-Saftey Vision uses ImageNet-pretrained MobileNetV2 to classify detected face/head crops and OpenCV for image, video, and webcam processing. Mask and helmet tasks use separate models and datasets.
+Saftey Vision is a static web dashboard with Vercel serverless API routes. Detection runs on an external inference API; violation records and private face/head crops are stored in Supabase. Model training and local CLI scripts remain Python tools and are not part of the Vercel runtime.
 
-## Project files
+## Deploy to Vercel
 
-- `src/baseline_classifier.py` — MobileNetV2 training, evaluation, and single-crop prediction
-- `src/opencv_inference.py` — YOLO helmet detections, OpenCV mask proposals, compliance counts, and video processing
-- `src/camera_demo.py` — OpenCV image, video, and live-webcam inference
-- `src/app.py` — Streamlit image/video/webcam-snapshot UI
-- `src/event_store.py` — SQLite violation records, local evidence photos, and retention cleanup
-- `src/prepare_voc_dataset.py` — Pascal VOC annotation conversion and source-image splits
-- `src/prepare_yolo_dataset.py` — Pascal VOC bounding-box conversion for detector training
-- `src/kaggle_dataset.py` — KaggleHub dataset downloader
-- `src/train.py` and `src/inference.py` — optional YOLO detection workflow
-- `data/` — downloaded data and converted train/validation/test crops
-- `models/` — trained checkpoints and evaluation metadata
+1. Create a Supabase project. In its SQL editor, run [`supabase/schema.sql`](./supabase/schema.sql) to create the private evidence bucket and violations table.
+2. Connect this GitHub repository to Vercel. Vercel serves the static site from `public/` and deploys the functions in `api/`; no build command or Python runtime is needed.
+3. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
 
-## Install
+| Variable | Required | Value |
+|---|---|---|
+| `INFERENCE_API_URL` | Yes | HTTPS URL for your image inference API |
+| `INFERENCE_API_KEY` | No | Bearer token for that inference API, if required |
+| `SUPABASE_URL` | Yes | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service-role key; keep it server-side |
+| `SUPABASE_EVIDENCE_BUCKET` | No | Private bucket name; defaults to `safety-evidence` |
+
+The website and its API routes are public: there is no password or sign-in. Set environment variables for every Vercel environment you intend to use. Keep the Supabase service-role key and inference key in Vercel server-side environment variables; never add either to browser code.
+
+## Inference API contract
+
+Vercel sends the configured inference endpoint a `POST` JSON request:
+
+```json
+{
+  "task": "mask",
+  "image": "data:image/jpeg;base64,..."
+}
+```
+
+If `INFERENCE_API_KEY` is set, Vercel sends it in `Authorization: Bearer ...`. Return JSON with normalized boxes (`x`, `y`, `width`, `height` are fractions from 0 to 1):
+
+```json
+{
+  "predictions": [
+    { "label": "without_mask", "confidence": 0.98, "box": [0.2, 0.1, 0.3, 0.4] }
+  ]
+}
+```
+
+Supported violation labels are `without_mask`, `mask_worn_incorrectly`, and `no_helmet`; compliant labels can be `with_mask` and `helmet`. The browser displays returned predictions, but only violation detections at or above the fixed 95% threshold are eligible for evidence capture. The browser crops the returned face/head box before upload; the original photo is not stored by this app. The service must use HTTPS and return promptly within the Vercel function timeout. The UI currently analyzes still images only; video and live camera processing are not included in this Vercel deployment.
+
+## Public access, privacy, and limitations
+
+Anyone can submit images for inference, read and delete evidence records, and upload eligible violation crops. Public access can incur inference and storage costs and lets visitors modify the shared evidence vault; configure provider quotas and Vercel rate limiting before sharing the URL. Images are sent to the inference service you configure. When evidence capture is enabled, only confirmed violation crops are uploaded to the private Supabase bucket; signed display links expire after an hour, and records/crops older than 30 days are removed when the vault is opened. Deploy only with suitable notice, consent, and a reviewed inference provider. Predictions are advisory and must be reviewed; a missing detection is not proof of compliance.
+
+## Python training and local CLI
+
+The Python requirements and scripts are for local development and model training, not Vercel deployment. Install them with:
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-## Data
-
-The project uses these public-domain Kaggle datasets (both dataset pages list CC0/Public Domain):
-
-- [Face Mask Detection](https://www.kaggle.com/datasets/andrewmvd/face-mask-detection): 853 images, 3 classes, Pascal VOC XML boxes
-- [Helmet Detection](https://www.kaggle.com/datasets/andrewmvd/helmet-detection): 764 images, 2 classes, Pascal VOC XML boxes
-
-Downloads have been placed in `data/raw/`. To fetch them again:
-
-```powershell
-python src\kaggle_dataset.py --slug andrewmvd/face-mask-detection
-python src\kaggle_dataset.py --slug andrewmvd/helmet-detection
-```
-
-Convert annotations to classifier crops with image-level 70/20/10 train/validation/test splits:
-
-```powershell
-python src\prepare_voc_dataset.py --task mask --source data\raw\face-mask-detection --output data\classification\mask
-python src\prepare_voc_dataset.py --task helmet --source data\raw\helmet-detection --output data\classification\helmet
-```
-
-The train, validation, and test splits are grouped by original source image, preventing crops from a single image appearing in multiple splits.
-
-## Train and evaluate
-
-```powershell
-python src\baseline_classifier.py --task mask --data-root data\classification --epochs 15 --batch-size 32
-python src\baseline_classifier.py --task helmet --data-root data\classification --epochs 15 --batch-size 32
-```
-
-Training starts with the pretrained MobileNetV2 classifier head frozen, then fine-tunes the backbone. Train crops receive flips, small rotations, brightness/contrast jitter, and occasional blur. The script selects by validation loss and reports test accuracy, per-class precision/recall/F1, and confusion matrix. The test set is evaluated only after training.
-
-To compare against randomly initialized MobileNetV2, add `--scratch`; scratch runs save separately under `models/<task>_mobilenetv2_scratch/`.
-
-Current bundled checkpoints were short three-epoch starter runs:
-
-| Task | Test accuracy | Violation-class recall |
-|---|---:|---:|
-| Mask | 90.2% | `without_mask`: 94.7%; `mask_worn_incorrectly`: 77.8% |
-| Helmet | 91.3% | `no_helmet`: 94.9% |
-
-The included checkpoint files were produced before the latest augmentation changes, in three-epoch starter runs without augmentation. These are crop-classification scores on small public datasets—not object-detection mAP or evidence of deployment readiness. Retrain for longer, inspect errors, and evaluate on consented camera-specific data before relying on results.
-
-## Run image, video, or live webcam inference
-
-Live webcam (press `q` to exit):
-
-```powershell
-python -m src.camera_demo --task mask --source 0
-```
-
-For video or image files, pass the file path; annotated output is written beside the source by default:
-
-```powershell
-python -m src.camera_demo --task helmet --source data\sample.mp4
-python -m src.camera_demo --task mask --source data\sample.jpg --output output\annotated.jpg
-```
-
-For each no-mask/no-helmet detection, the system saves one padded **face crop** (mask task) or **head crop** (helmet task), not the full frame. Lower-confidence red violation candidates (at least 25%) are also saved and marked as review candidates in the source field; only detections at the fixed 95% cutoff count as confirmed. Each crop has its own database row with UTC timestamp, task, class, confidence, source, evidence type, and relative photo path in `data/events.sqlite3`. Photos are stored under `evidence/` and automatically removed from disk with their database records after 30 days. During video/webcam processing, overlapping detections are tracked and one evidence crop is saved per violation appearance; a new photo can be captured after that person is absent for 8 seconds. Duplicate overlapping proposals are suppressed. Older full-frame evidence from earlier versions is automatically removed during the database migration. Use `--no-save-evidence` in the CLI to disable both persistence actions.
-
-The confidence threshold is fixed at **95%** in both the dashboard and CLI; it is not user-adjustable.
-
-Helmet localization prefers the latest trained YOLO detector under `models/helmet_detector*/weights/best.pt`. To create or retrain it from the bundled Pascal VOC helmet annotations:
-
-```powershell
-python -m src.prepare_yolo_dataset --task helmet --source data\raw\helmet-detection --output data\helmet_detector
-python src\train.py --task helmet --data data\helmet_detector --epochs 15 --imgsz 416 --batch-size 8
-```
-
-The converter groups train/validation/test splits by source image. Boxes are red for predicted violations and green for predicted compliant detections. Detections at 95% are confirmed; lower-confidence boxes are review suggestions and do not count as confirmed violations. Red review crops are saved as review candidates so they can be checked later. If no candidate is found, the result is inconclusive rather than confirmation of compliance. Without trained YOLO weights the app retains its OpenCV/MobileNetV2 fallback.
-
-The current local detector was fine-tuned for five additional CPU epochs. On its 77-image held-out test split it reached 64.5% mAP@0.5 at the detector's low evaluation cutoff; the fixed 95% cutoff produced no confirmed boxes on that split. Review boxes therefore remain important, and this starter model is not suitable for unattended enforcement.
-
-The Streamlit sidebar also has a **Capture violation evidence** toggle (on by default). The evidence vault displays saved photos and allows individual records/photos to be deleted. The CLI captures evidence by default; pass `--no-save-evidence` to disable it.
-
-## Streamlit UI
-
-The repository includes `packages.txt` with Linux runtime libraries needed by OpenCV on Streamlit Community Cloud. OpenCV requires NumPy below 2.3 for the supported 4.12 wheels.
-
-```powershell
-streamlit run src/app.py --server.address 127.0.0.1
-```
-
-The UI supports image upload, annotated video upload/download, and webcam snapshots. Use the CLI webcam command for continuous live processing.
-
-To deploy, connect this GitHub repository to Streamlit Community Cloud, select branch `main` and app file `src/app.py`. Each push to `main` triggers a redeploy.
-
-## Local privacy and evidence handling
-
-- Processing, SQLite, and evidence photos stay on the local machine; the app does not require a hosted backend service.
-- Photos show only a padded face/head crop with a small class/confidence header. No face recognition or identity labels are produced.
-- Retention cleanup runs whenever the dashboard executes or the CLI initializes the local database; individual items can also be deleted in the Evidence Vault.
-- Use only with appropriate notice/consent and access controls. Keep the local `evidence/` folder and `data/events.sqlite3` private.
-
-## Detection limitations
-
-- Mask candidates come from OpenCV's frontal-face Haar cascade.
-- If detector weights are not available, helmet checks fall back to generic OpenCV face/person proposals and crop classification. Small, side-facing, occluded, or distant people can be missed.
-- The fixed 95% cutoff is intentionally conservative and may leave candidates unconfirmed. Manually review red/green boxes marked REVIEW and validate on representative camera images.
-- Classifier accuracy is not mAP. The optional YOLO workflow is separate and requires YOLO-format bounding-box labels.
-- No face recognition is performed. Media is processed locally; only explicit outputs and opt-in violation logs are written to disk.
+Training, dataset preparation, and local image/video/webcam inference utilities remain under `src/`. Their local SQLite evidence store is separate from the hosted dashboard's Supabase store.

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#07111b">
+    <meta name="description" content="Privacy-aware mask and helmet image analysis.">
+    <title>Saftey Vision</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="background-glow" aria-hidden="true"></div>
+    <main class="shell">
+      <section id="app-screen">
+        <header class="topbar">
+          <a class="brand" href="/" aria-label="Saftey Vision home">
+            <span class="brand-mark" aria-hidden="true">S</span>
+            <span>SAFTEY <span class="brand-light">VISION</span></span>
+          </a>
+          <div class="topbar-actions">
+            <span class="connection"><span class="status-dot"></span> PUBLIC DEMO</span>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">IMAGE COMPLIANCE · 95% CONFIDENCE</p>
+            <h1>A clearer view of<br><span>every safety check.</span></h1>
+            <p>Analyze a photo for face-mask or safety-helmet compliance. Evidence saves only a violation crop, never the full image.</p>
+          </div>
+          <div class="hero-symbol" aria-hidden="true">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <div class="shield">✓</div>
+            <span class="spark spark-one"></span>
+            <span class="spark spark-two"></span>
+          </div>
+        </section>
+
+        <div id="app-alert" class="alert" role="status" hidden></div>
+
+        <nav class="tabs" aria-label="Dashboard sections">
+          <button class="tab active" data-page="analysis-page" type="button"><span>◎</span> Image analysis</button>
+          <button class="tab" data-page="evidence-page" type="button"><span>▤</span> Evidence vault <span id="event-count" class="tab-count">0</span></button>
+        </nav>
+
+        <section id="analysis-page" class="page">
+          <div class="dashboard-grid">
+            <article class="panel input-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">01 / CONFIGURE</p>
+                  <h2>Choose an inspection</h2>
+                </div>
+                <span class="step-number">01</span>
+              </div>
+              <label class="field-label" for="task-select">Monitoring profile</label>
+              <select id="task-select">
+                <option value="mask">Face mask</option>
+                <option value="helmet">Safety helmet</option>
+              </select>
+              <label class="field-label">Photo to inspect</label>
+              <label id="drop-zone" class="drop-zone" for="image-input">
+                <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp">
+                <span class="upload-icon" aria-hidden="true">↑</span>
+                <strong>Drop a photo here</strong>
+                <span class="muted">or <span class="text-link">browse files</span></span>
+                <span class="file-hint">JPG, PNG or WebP · up to 12 MB</span>
+              </label>
+              <div id="selected-file" class="selected-file" hidden></div>
+              <div class="threshold-row">
+                <span>Confirmation threshold</span>
+                <strong>95%</strong>
+              </div>
+              <label class="toggle-row" for="save-evidence">
+                <span><strong>Save violation crops</strong><small>Secure storage · removed after 30 days</small></span>
+                <input id="save-evidence" type="checkbox" checked>
+                <span class="toggle" aria-hidden="true"></span>
+              </label>
+              <button id="analyze-button" class="button button-primary full-width" type="button" disabled>
+                Analyze photo <span aria-hidden="true">↗</span>
+              </button>
+              <p class="privacy-note"><span aria-hidden="true">◆</span> Photos are sent to your configured inference API. Only confirmed violation crops are saved.</p>
+            </article>
+
+            <article class="panel results-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">02 / INSPECT</p>
+                  <h2>Analysis result</h2>
+                </div>
+                <span id="result-badge" class="result-badge">AWAITING PHOTO</span>
+              </div>
+              <div id="result-empty" class="result-empty">
+                <div class="empty-frame" aria-hidden="true"><span>＋</span></div>
+                <strong>Your result will appear here</strong>
+                <p>Choose a clear photo, then run the analysis.</p>
+              </div>
+              <div id="result-content" hidden>
+                <div class="canvas-wrap"><canvas id="result-canvas" aria-label="Photo with detection boxes"></canvas></div>
+                <div class="metrics">
+                  <div class="metric"><span>REGIONS FOUND</span><strong id="metric-total">0</strong></div>
+                  <div class="metric metric-danger"><span>VIOLATIONS</span><strong id="metric-violations">0</strong></div>
+                  <div class="metric metric-good"><span>COMPLIANT</span><strong id="metric-compliant">0</strong></div>
+                </div>
+                <p id="result-note" class="result-note"></p>
+                <div id="prediction-list" class="prediction-list"></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="evidence-page" class="page" hidden>
+          <article class="panel evidence-panel">
+            <div class="panel-heading evidence-heading">
+              <div>
+                <p class="eyebrow">30-DAY RETENTION</p>
+                <h2>Evidence vault</h2>
+                <p class="muted">Only face or head crops from confirmed violations are stored.</p>
+              </div>
+              <div class="evidence-controls">
+                <select id="evidence-filter" aria-label="Filter evidence">
+                  <option value="">All profiles</option>
+                  <option value="mask">Face mask</option>
+                  <option value="helmet">Safety helmet</option>
+                </select>
+                <button id="refresh-events" class="button button-quiet" type="button">↻ Refresh</button>
+              </div>
+            </div>
+            <div id="events-grid" class="events-grid"></div>
+            <p id="events-empty" class="empty-events">No saved evidence yet. Confirmed violation crops will appear here.</p>
+          </article>
+        </section>
+
+        <footer class="footer">
+          <span>SAFTEY VISION <span class="footer-dot">·</span> COMPUTER VISION, WITH CARE</span>
+          <span>Predictions are advisory. Review results before taking action.</span>
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>
