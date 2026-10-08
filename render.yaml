@@ -16,6 +16,4 @@ services:
       - key: SAFETY_HELMET_MODEL
         value: models/helmet_mobilenetv2/best_model.pth
       - key: SAFETY_REQUIRE_API_KEY
-        value: true
-      - key: INFERENCE_API_KEY
-        sync: false
+        value: false

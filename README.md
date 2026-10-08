@@ -17,7 +17,7 @@ This starts the local dashboard at `http://127.0.0.1:4173` and serves the browse
 ## Deploy to Vercel
 
 1. Create a Supabase project. In its SQL editor, run [`supabase/schema.sql`](./supabase/schema.sql) to create the private evidence bucket and violations table.
-2. Deploy the Python inference API using the `render.yaml` blueprint. Render asks for `INFERENCE_API_KEY`; create a long random value and keep it private. The demo model weights are included in this public repository.
+2. Deploy the Python inference API using the `render.yaml` blueprint. The inference endpoint is public and does not require an API key. The demo model weights are included in this public repository.
 3. Connect this GitHub repository to Vercel. `vercel.json` sets the framework preset to **Other** and the output directory to `public`; leave the build command blank. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`.
 4. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
 
@@ -29,7 +29,7 @@ This starts the local dashboard at `http://127.0.0.1:4173` and serves the browse
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service-role key; keep it server-side |
 | `SUPABASE_EVIDENCE_BUCKET` | No | Private bucket name; defaults to `safety-evidence` |
 
-Set `INFERENCE_API_URL` to the Render service URL followed by `/api/analyze`, and set `INFERENCE_API_KEY` to the same random key configured for Render. The website and its API routes are public: there is no password or sign-in. Set environment variables for every Vercel environment you intend to use. Keep the Supabase service-role key and inference key in Vercel server-side environment variables; never add either to browser code.
+Set `INFERENCE_API_URL` to the Render service URL followed by `/api/analyze`. Leave `INFERENCE_API_KEY` unset. The website and inference API are public: there is no password or sign-in, and anyone can submit requests directly to the inference endpoint. Set environment variables for every Vercel environment you intend to use. Keep the Supabase service-role key in Vercel server-side environment variables; never add it to browser code.
 
 Render's free web service spins down after 15 minutes without traffic, and its filesystem is temporary. Evidence remains in Supabase; the first inference request after a sleep may need a retry after the service wakes. Free compute is intended for testing and may not be reliable enough for production.
 
