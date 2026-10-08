@@ -117,10 +117,14 @@ class LocalDashboardHandler(BaseHTTPRequestHandler):
             task = body.get("task")
             if task not in VALID_TASKS:
                 raise ValueError("task must be mask or helmet.")
+            threshold = body.get("threshold", 0.95)
+            if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0.25 <= threshold <= 1:
+                raise ValueError("threshold must be a number between 0.25 and 1.")
             frame = self._image_from_data_url(body.get("image"), MAX_IMAGE_BYTES)
             height, width = frame.shape[:2]
             detector = self._get_detector(task)
             with detector_lock:
+                detector.confidence = float(threshold)
                 _, predictions = detector.predict_frame(frame)
                 predictions = [*predictions, *detector.last_review_predictions]
             output = []
@@ -153,6 +157,7 @@ class LocalDashboardHandler(BaseHTTPRequestHandler):
             task = body.get("task")
             class_name = body.get("class_name")
             confidence = body.get("confidence")
+            threshold = body.get("threshold", 0.95)
             source = body.get("source")
             if task not in VALID_TASKS:
                 raise ValueError("task must be mask or helmet.")
@@ -160,8 +165,10 @@ class LocalDashboardHandler(BaseHTTPRequestHandler):
                 raise ValueError("Unsupported violation class.")
             if (task == "mask") != (class_name != "no_helmet"):
                 raise ValueError("The violation class does not match the selected profile.")
-            if not isinstance(confidence, (int, float)) or not 0.95 <= confidence <= 1:
-                raise ValueError("Only violations at or above 95% confidence can be saved.")
+            if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0.25 <= threshold <= 1:
+                raise ValueError("threshold must be a number between 0.25 and 1.")
+            if not isinstance(confidence, (int, float)) or confidence < threshold or confidence > 1:
+                raise ValueError(f"Only violations at or above {threshold:.0%} confidence can be saved.")
             if not isinstance(source, str) or len(source) > 200:
                 raise ValueError("source must be a string of at most 200 characters.")
             image = self._image_from_data_url(body.get("evidence"), 1024 * 1024)

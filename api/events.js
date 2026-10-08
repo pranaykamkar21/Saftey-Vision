@@ -43,8 +43,12 @@ async function createEvent(req, res) {
   if ((body.task === "mask") !== (body.class_name !== "no_helmet")) {
     return sendJson(res, 400, { error: "The violation class does not match the selected profile." });
   }
-  if (!Number.isFinite(body.confidence) || body.confidence < 0.95 || body.confidence > 1) {
-    return sendJson(res, 400, { error: "Only violations at or above 95% confidence can be saved." });
+  const threshold = body.threshold ?? 0.95;
+  if (!Number.isFinite(threshold) || threshold < 0.25 || threshold > 1) {
+    return sendJson(res, 400, { error: "threshold must be a number between 0.25 and 1." });
+  }
+  if (!Number.isFinite(body.confidence) || body.confidence < threshold || body.confidence > 1) {
+    return sendJson(res, 400, { error: `Only violations at or above ${Math.round(threshold * 100)}% confidence can be saved.` });
   }
   if (typeof body.source !== "string" || body.source.length > 200) {
     return sendJson(res, 400, { error: "source must be a string of at most 200 characters." });

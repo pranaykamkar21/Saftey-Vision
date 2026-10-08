@@ -1,4 +1,3 @@
-const CONFIDENCE_THRESHOLD = 0.95;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const MAX_PROCESSED_IMAGE_BYTES = 2.8 * 1024 * 1024;
@@ -11,6 +10,16 @@ const CONFIRMED_MASK_CLASSES = new Set(["without_mask", "mask_worn_incorrectly"]
 const CONFIRMED_HELMET_CLASSES = new Set(["no_helmet"]);
 
 const byId = (id) => document.getElementById(id);
+const confidenceThresholdInput = byId("confidence-threshold");
+let confidenceThreshold = Number(confidenceThresholdInput.value) / 100;
+confidenceThresholdInput.addEventListener("input", () => {
+  confidenceThreshold = Number(confidenceThresholdInput.value) / 100;
+  byId("confidence-value").textContent = `${confidenceThresholdInput.value}%`;
+  if (latestPredictions.length) {
+    drawImage(latestPredictions, runMode ? sourceVideo : currentImage);
+    renderPredictions(latestPredictions);
+  }
+});
 const imageInput = byId("image-input");
 const dropZone = byId("drop-zone");
 const analyzeButton = byId("analyze-button");
@@ -336,7 +345,7 @@ function drawImage(predictions, source = currentImage) {
     const boxWidth = width * resultCanvas.width;
     const boxHeight = height * resultCanvas.height;
     const violation = isViolation(task, prediction.label);
-    const confirmed = prediction.confidence >= CONFIDENCE_THRESHOLD;
+    const confirmed = prediction.confidence >= confidenceThreshold;
     const color = !confirmed || (!violation && !isCompliant(task, prediction.label))
       ? "#ffc36b"
       : violation ? "#ff776e" : "#62e0ad";
@@ -381,7 +390,7 @@ async function requestPredictions(source, task) {
   const image = await imageAsDataUrl(source);
   const result = await apiRequest("/api/analyze", {
     method: "POST",
-    body: JSON.stringify({ task, image }),
+    body: JSON.stringify({ task, image, threshold: confidenceThreshold }),
   });
   return result.predictions;
 }
@@ -405,7 +414,7 @@ function trackAndSaveViolations(predictions, frame, timestampSeconds) {
   const seenTrackIds = new Set();
   const task = byId("task-select").value;
   for (const prediction of predictions) {
-    if (prediction.confidence < CONFIDENCE_THRESHOLD || !isViolation(task, prediction.label)) continue;
+    if (prediction.confidence < confidenceThreshold || !isViolation(task, prediction.label)) continue;
     const match = activeViolationTracks
       .filter((track) => track.label === prediction.label && !seenTrackIds.has(track.id))
       .map((track) => ({ track, overlap: boxOverlap(track.prediction, prediction) }))
@@ -437,6 +446,7 @@ function queueEvidenceSave(prediction, frame, source) {
       task,
       class_name: prediction.label,
       confidence: prediction.confidence,
+      threshold: confidenceThreshold,
       source,
       evidence,
     }),
@@ -449,7 +459,7 @@ function queueEvidenceSave(prediction, frame, source) {
 
 function updateRunMetrics(predictions) {
   const task = byId("task-select").value;
-  const confirmed = predictions.filter((prediction) => prediction.confidence >= CONFIDENCE_THRESHOLD);
+  const confirmed = predictions.filter((prediction) => prediction.confidence >= confidenceThreshold);
   totalDetections += predictions.length;
   totalViolations += confirmed.filter((prediction) => isViolation(task, prediction.label)).length;
   totalCompliant += confirmed.filter((prediction) => isCompliant(task, prediction.label)).length;
@@ -458,7 +468,7 @@ function updateRunMetrics(predictions) {
   byId("metric-violations").textContent = String(totalViolations);
   byId("metric-compliant").textContent = String(totalCompliant);
   renderPredictions(predictions);
-  byId("result-note").textContent = `${processedFrames} frame${processedFrames === 1 ? "" : "s"} analyzed. Counts are detection events across sampled frames; only detections at or above 95% are confirmed.`;
+  byId("result-note").textContent = `${processedFrames} frame${processedFrames === 1 ? "" : "s"} analyzed. Counts are detection events across sampled frames; detections at or above ${Math.round(confidenceThreshold * 100)}% meet the selected threshold.`;
 }
 
 function resetRunMetrics() {
@@ -938,7 +948,7 @@ function renderPredictions(predictions) {
     name.className = "prediction-name";
     const mark = document.createElement("span");
     const violation = isViolation(task, prediction.label);
-    mark.className = `prediction-mark ${prediction.confidence < CONFIDENCE_THRESHOLD ? "review" : violation ? "violation" : ""}`;
+    mark.className = `prediction-mark ${prediction.confidence < confidenceThreshold ? "review" : violation ? "violation" : ""}`;
     const label = document.createElement("span");
     label.textContent = prediction.label.replaceAll("_", " ");
     name.append(mark, label);
@@ -959,7 +969,7 @@ analyzeButton.addEventListener("click", async () => {
   try {
     const task = byId("task-select").value;
     const predictions = await requestPredictions(currentImage, task);
-    const confirmed = predictions.filter((prediction) => prediction.confidence >= CONFIDENCE_THRESHOLD);
+    const confirmed = predictions.filter((prediction) => prediction.confidence >= confidenceThreshold);
     const violations = confirmed.filter((prediction) => isViolation(task, prediction.label));
     const compliant = confirmed.filter((prediction) => isCompliant(task, prediction.label)).length;
     drawImage(predictions);
@@ -971,13 +981,13 @@ analyzeButton.addEventListener("click", async () => {
     byId("result-badge").className = "result-badge ready";
     byId("result-note").textContent = predictions.length === 0
       ? "No regions were returned. This is inconclusive, not confirmation of compliance."
-      : `${confirmed.length} confirmed region${confirmed.length === 1 ? "" : "s"} at the fixed 95% threshold. Lower-confidence results are review suggestions.`;
+      : `${confirmed.length} region${confirmed.length === 1 ? "" : "s"} meet the selected ${Math.round(confidenceThreshold * 100)}% threshold. Lower-confidence results are review suggestions.`;
 
     if (byId("save-evidence").checked) {
       if (!violations.length) {
         const reviewViolations = predictions.filter((prediction) => isViolation(task, prediction.label));
         byId("result-note").textContent += reviewViolations.length
-          ? " No evidence crop saved: suspected violation(s) were below the 95% confirmation threshold."
+          ? ` No evidence crop saved: suspected violation(s) were below the selected ${Math.round(confidenceThreshold * 100)}% threshold.`
           : " No evidence crop saved: no violation was detected.";
       } else {
         const outcomes = await Promise.allSettled(violations.map((prediction) => {
@@ -989,6 +999,7 @@ analyzeButton.addEventListener("click", async () => {
               task,
               class_name: prediction.label,
               confidence: prediction.confidence,
+              threshold: confidenceThreshold,
               source: sourceMode === "webcam" ? "webcam snapshot" : "image upload",
               evidence,
             }),

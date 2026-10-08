@@ -36,6 +36,10 @@ module.exports = async function handler(req, res) {
   try {
     const body = await readJson(req, MAX_REQUEST_BYTES);
     if (!VALID_TASKS.has(body.task)) return sendJson(res, 400, { error: "task must be mask or helmet." });
+    const threshold = body.threshold ?? 0.95;
+    if (!Number.isFinite(threshold) || threshold < 0.25 || threshold > 1) {
+      return sendJson(res, 400, { error: "threshold must be a number between 0.25 and 1." });
+    }
     if (typeof body.image !== "string" || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(body.image)) {
       return sendJson(res, 400, { error: "image must be a base64 JPEG, PNG or WebP data URL." });
     }
@@ -48,7 +52,7 @@ module.exports = async function handler(req, res) {
     const response = await fetch(parsedEndpoint, {
       method: "POST",
       headers,
-      body: JSON.stringify({ task: body.task, image: body.image }),
+      body: JSON.stringify({ task: body.task, image: body.image, threshold }),
       signal: AbortSignal.timeout(50000),
     });
     if (!response.ok) {

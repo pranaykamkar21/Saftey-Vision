@@ -106,9 +106,11 @@
                 <button id="process-stop" class="button button-quiet full-width" type="button">Stop processing</button>
               </div>
               <div class="threshold-row">
-                <span>Confirmation threshold</span>
-                <strong>95%</strong>
+                <label for="confidence-threshold">Confidence threshold</label>
+                <strong id="confidence-value">95%</strong>
               </div>
+              <input id="confidence-threshold" class="confidence-slider" type="range" min="25" max="99" step="1" value="95" aria-label="Confidence threshold">
+              <div class="threshold-scale"><span>Low · more detections</span><span>High · stricter</span></div>
               <label class="toggle-row" for="save-evidence">
                 <span><strong>Save violation crops</strong><small>Secure storage · removed after 30 days</small></span>
                 <input id="save-evidence" type="checkbox" checked>

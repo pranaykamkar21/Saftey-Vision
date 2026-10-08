@@ -108,6 +108,8 @@ select:focus { border-color: var(--mint-dim); outline: none; }
 .selected-file button { border: 0; color: #ff9a8e; background: none; cursor: pointer; }
 .threshold-row { display: flex; justify-content: space-between; margin: 18px 0 16px; color: #9eb1bd; font-size: 12px; }
 .threshold-row strong { color: var(--mint); }
+.confidence-slider { width: 100%; margin: 0; accent-color: var(--mint); cursor: pointer; }
+.threshold-scale { display: flex; justify-content: space-between; margin: 4px 0 16px; color: #718896; font-size: 9px; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 19px; cursor: pointer; }
 .toggle-row > span:first-child { display: grid; gap: 3px; }.toggle-row strong { color: #c7d5db; font-size: 12px; }.toggle-row small { color: #778d9b; font-size: 10px; }
 .toggle-row input { position: absolute; opacity: 0; }.toggle { width: 35px; height: 20px; position: relative; flex: 0 0 35px; border-radius: 12px; background: #364956; transition: background .15s; }
