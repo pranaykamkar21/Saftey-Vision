@@ -1,5 +1,9 @@
 {
   "private": true,
+  "scripts": {
+    "start": "python app.py",
+    "dev": "python app.py"
+  },
   "engines": {
     "node": "22.x"
   }

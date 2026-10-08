@@ -1,6 +1,18 @@
 # Saftey Vision
 
-Saftey Vision is a static web dashboard with Vercel serverless API routes. Detection runs on an external inference API; violation records and private face/head crops are stored in Supabase. Model training and local CLI scripts remain Python tools and are not part of the Vercel runtime.
+Saftey Vision is a Python-first dashboard that can run locally with the bundled OpenCV + local model inference stack. The repository also includes a Vercel deployment variant that forwards analysis to an external inference API and stores evidence in Supabase, but the original project behavior is the Python local app.
+
+## Run it locally in Python
+
+1. From the repository root, create and activate a Python environment if needed.
+2. Install dependencies from `requirements.txt`.
+3. Start the app:
+
+```bash
+python app.py
+```
+
+This starts the local dashboard at `http://127.0.0.1:4173` and serves the browser UI while running the model in Python. The same local server also exposes the evidence and analysis APIs used by the dashboard.
 
 ## Deploy to Vercel
 

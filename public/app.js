@@ -969,24 +969,35 @@ analyzeButton.addEventListener("click", async () => {
       ? "No regions were returned. This is inconclusive, not confirmation of compliance."
       : `${confirmed.length} confirmed region${confirmed.length === 1 ? "" : "s"} at the fixed 95% threshold. Lower-confidence results are review suggestions.`;
 
-    if (byId("save-evidence").checked && violations.length) {
-      const outcomes = await Promise.allSettled(violations.map((prediction) => {
-        const evidence = cropAsDataUrl(prediction, currentImage);
-        if (!evidence) throw new Error("A violation crop could not be prepared.");
-        return apiRequest("/api/events", {
-          method: "POST",
-          body: JSON.stringify({
-            task,
-            class_name: prediction.label,
-            confidence: prediction.confidence,
-            source: sourceMode === "webcam" ? "webcam snapshot" : "image upload",
-            evidence,
-          }),
-        });
-      }));
-      const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
-      if (failed) showAlert(`${violations.length - failed} crop(s) saved. ${failed} could not be saved; check the Supabase configuration and try again.`);
-      await loadEvents();
+    if (byId("save-evidence").checked) {
+      if (!violations.length) {
+        const reviewViolations = predictions.filter((prediction) => isViolation(task, prediction.label));
+        byId("result-note").textContent += reviewViolations.length
+          ? " No evidence crop saved: suspected violation(s) were below the 95% confirmation threshold."
+          : " No evidence crop saved: no violation was detected.";
+      } else {
+        const outcomes = await Promise.allSettled(violations.map((prediction) => {
+          const evidence = cropAsDataUrl(prediction, currentImage);
+          if (!evidence) throw new Error("A violation crop could not be prepared.");
+          return apiRequest("/api/events", {
+            method: "POST",
+            body: JSON.stringify({
+              task,
+              class_name: prediction.label,
+              confidence: prediction.confidence,
+              source: sourceMode === "webcam" ? "webcam snapshot" : "image upload",
+              evidence,
+            }),
+          });
+        }));
+        const failed = outcomes.filter((outcome) => outcome.status === "rejected").length;
+        const saved = outcomes.length - failed;
+        if (failed) {
+          showAlert(`${saved} violation crop(s) saved. ${failed} could not be saved; check the local evidence storage and try again.`);
+        }
+        byId("result-note").textContent += ` ${saved} confirmed violation crop${saved === 1 ? "" : "s"} saved to the Evidence Vault.`;
+        await loadEvents();
+      }
     }
   } catch (error) {
     byId("result-badge").textContent = "ANALYSIS FAILED";
