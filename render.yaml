@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: safety-vision-inference
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: python app.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: HOST
+        value: 0.0.0.0
+      - key: SAFETY_MASK_MODEL
+        value: models/mask_mobilenetv2/best_model.pth
+      - key: SAFETY_HELMET_MODEL
+        value: models/helmet_mobilenetv2/best_model.pth
+      - key: SAFETY_REQUIRE_API_KEY
+        value: true
+      - key: INFERENCE_API_KEY
+        sync: false

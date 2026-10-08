@@ -1,6 +1,6 @@
 # Saftey Vision
 
-Saftey Vision is a Python-first dashboard that can run locally with the bundled OpenCV + local model inference stack. The repository also includes a Vercel deployment variant that forwards analysis to an external inference API and stores evidence in Supabase, but the original project behavior is the Python local app.
+Saftey Vision uses a browser dashboard, Python/OpenCV inference, and Supabase evidence storage. For a live deployment, the frontend and JavaScript API routes run on Vercel while the Python inference API runs separately on Render. Render's free service sleeps after inactivity, so its first request can be slow.
 
 ## Run it locally in Python
 
@@ -17,18 +17,21 @@ This starts the local dashboard at `http://127.0.0.1:4173` and serves the browse
 ## Deploy to Vercel
 
 1. Create a Supabase project. In its SQL editor, run [`supabase/schema.sql`](./supabase/schema.sql) to create the private evidence bucket and violations table.
-2. Connect this GitHub repository to Vercel. `vercel.json` sets the framework preset to **Other** and the output directory to `public`; leave the build command blank. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`; this repository does not contain a Python runtime or Python entrypoint.
-3. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
+2. Deploy the Python inference API using the `render.yaml` blueprint. Render asks for `INFERENCE_API_KEY`; create a long random value and keep it private. The demo model weights are included in this public repository.
+3. Connect this GitHub repository to Vercel. `vercel.json` sets the framework preset to **Other** and the output directory to `public`; leave the build command blank. Vercel serves the static site from `public/` and deploys the JavaScript functions in `api/`.
+4. Add the following environment variables in **Vercel → Project → Settings → Environment Variables**, then redeploy:
 
 | Variable | Required | Value |
 |---|---|---|
-| `INFERENCE_API_URL` | Yes | HTTPS URL for your image inference API |
+| `INFERENCE_API_URL` | Yes | Render service HTTPS URL followed by `/api/analyze` |
 | `INFERENCE_API_KEY` | No | Bearer token for that inference API, if required |
 | `SUPABASE_URL` | Yes | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service-role key; keep it server-side |
 | `SUPABASE_EVIDENCE_BUCKET` | No | Private bucket name; defaults to `safety-evidence` |
 
-The website and its API routes are public: there is no password or sign-in. Set environment variables for every Vercel environment you intend to use. Keep the Supabase service-role key and inference key in Vercel server-side environment variables; never add either to browser code.
+Set `INFERENCE_API_URL` to the Render service URL followed by `/api/analyze`, and set `INFERENCE_API_KEY` to the same random key configured for Render. The website and its API routes are public: there is no password or sign-in. Set environment variables for every Vercel environment you intend to use. Keep the Supabase service-role key and inference key in Vercel server-side environment variables; never add either to browser code.
+
+Render's free web service spins down after 15 minutes without traffic, and its filesystem is temporary. Evidence remains in Supabase; the first inference request after a sleep may need a retry after the service wakes. Free compute is intended for testing and may not be reliable enough for production.
 
 ## Inference API contract
 
@@ -61,4 +64,4 @@ Anyone can submit images or video frames for inference, read and delete evidence
 
 ## Python training and local CLI
 
-This repository contains only the Vercel web app, JavaScript API routes, and Supabase schema. The Vercel app uses the external inference service configured by `INFERENCE_API_URL`; local Python training scripts and model weights are intentionally excluded from the GitHub deployment source.
+The local dashboard and model inference can also be run with `python app.py`. Dataset preparation and training scripts remain local development tools and are not needed by the deployed inference service.
